@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS room_snapshots;
+DROP TABLE IF EXISTS room_updates;
+DROP TABLE IF EXISTS rooms;

@@ -1,0 +1,20 @@
+# Copy to terraform.tfvars and edit.
+
+aws_region  = "us-east-1"
+project     = "duckduckcode"
+environment = "dev"
+
+# --- HTTPS (pick one) ---------------------------------------------------------
+# (1) Quick test over plain HTTP on the ALB DNS name: leave all three empty.
+# (2) Domain in Route 53: set both; a certificate is created automatically.
+# domain_name    = "code.example.edu"
+# hosted_zone_id = "Z0123456789ABCDEFGHIJ"
+# (3) Existing certificate (DNS managed elsewhere): set both, then CNAME your
+#     domain to the alb_dns_name output.
+# domain_name     = "code.example.edu"
+# certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/..."
+
+# --- Sizing ---------------------------------------------------------------------
+# db_instance_class      = "db.t4g.micro"
+# frontend_desired_count = 1
+# db_skip_final_snapshot = true

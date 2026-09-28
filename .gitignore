@@ -1,0 +1,23 @@
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/.terraform.lock.hcl
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/terraform.tfvars
+infra/terraform/*.tfplan
+
+# Go
+backend/bin/
+backend/tmp/
+
+# Node / Next.js (frontend has its own .gitignore too)
+node_modules/
+frontend/.next/
+frontend/test-results/
+frontend/playwright-report/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
