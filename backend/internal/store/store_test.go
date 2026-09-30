@@ -31,7 +31,7 @@ func TestCreateAndGetRoom(t *testing.T) {
 	ctx := context.Background()
 	st := store.New(testutil.Pool(t))
 
-	blank, err := st.CreateRoom(ctx, store.ModeBlank, nil, "python", nil)
+	blank, err := st.CreateRoom(ctx, store.ModeBlank, nil, "python", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,9 +47,9 @@ func TestCreateAndGetRoom(t *testing.T) {
 		t.Fatalf("GetRoom mismatch: %+v vs %+v", got, blank)
 	}
 
-	pid := "office-hours-queue"
+	pid := "two-sum"
 	seed := []byte{1, 2, 3, 4}
-	practice, err := st.CreateRoom(ctx, store.ModePractice, &pid, "python", seed)
+	practice, err := st.CreateRoom(ctx, store.ModePractice, &pid, "python", seed, []byte(`{"id":"two-sum"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestCreateAndGetRoom(t *testing.T) {
 
 func TestPracticeRoomRequiresProblem(t *testing.T) {
 	st := store.New(testutil.Pool(t))
-	if _, err := st.CreateRoom(context.Background(), store.ModePractice, nil, "python", nil); err == nil {
+	if _, err := st.CreateRoom(context.Background(), store.ModePractice, nil, "python", nil, nil); err == nil {
 		t.Fatal("expected constraint violation for practice room without problem")
 	}
 }
@@ -88,7 +88,7 @@ func TestPracticeRoomRequiresProblem(t *testing.T) {
 func TestUpdateLogAndSnapshotCompaction(t *testing.T) {
 	ctx := context.Background()
 	st := store.New(testutil.Pool(t))
-	room, err := st.CreateRoom(ctx, store.ModeBlank, nil, "python", nil)
+	room, err := st.CreateRoom(ctx, store.ModeBlank, nil, "python", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

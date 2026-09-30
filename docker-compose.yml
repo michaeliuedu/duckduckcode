@@ -26,9 +26,17 @@ services:
       PORT: "8080"
       DATABASE_URL: postgres://duck:duck@postgres:5432/duckduckcode?sslmode=disable
       MIGRATE_ON_START: "true"
-      # Browser origin that is allowed to call the API / open WebSockets.
-      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      # Browser origins allowed to call the API / open WebSockets. 3000 is the
+      # frontend container; 5173 is `npm run dev`, which proxies /api and /ws and
+      # so needs no CORS, but is listed for anyone hitting the backend directly.
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173
       SNAPSHOT_EVERY: "200"
+      # Local and CI only. Every request here comes from the Docker bridge, so
+      # the whole end-to-end suite looks like one very busy address; the
+      # production defaults (30/hour) would throttle it. Deployments do not set
+      # these, and keep the defaults in internal/config.
+      SIGNUPS_PER_IP: "2000"
+      LOGIN_ATTEMPTS_PER_IP: "2000"
       LOG_FORMAT: text
       LOG_LEVEL: info
     ports:
@@ -41,6 +49,9 @@ services:
       # check instead. Locally we rely on `docker compose ps` + /healthz.
       disable: true
 
+  # Static bundle served by nginx. BACKEND_PUBLIC_URL is written into
+  # /runtime-config.js at container start, so this image is the same one that runs
+  # on AWS (where the value is empty and the ALB routes /api and /ws).
   frontend:
     build:
       context: ./frontend
@@ -48,7 +59,6 @@ services:
       # URL the *browser* uses to reach the backend. Empty = same origin.
       BACKEND_PUBLIC_URL: http://localhost:8080
       PORT: "3000"
-      HOSTNAME: 0.0.0.0
     ports:
       - "3000:3000"
     depends_on:

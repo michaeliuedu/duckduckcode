@@ -15,7 +15,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/duckduckcode/backend/internal/problems"
+	"github.com/duckduckcode/backend/internal/seed"
 	"github.com/duckduckcode/backend/internal/server"
 	"github.com/duckduckcode/backend/internal/store"
 	"github.com/duckduckcode/backend/internal/testutil"
@@ -29,6 +29,12 @@ func newTestServer(t *testing.T, snapshotEvery int) (*httptest.Server, *server.S
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	if testing.Verbose() {
 		log = slog.New(slog.NewTextHandler(testWriter{t}, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	}
+	// The seeded problems are ordinary rows now, so the tests need them
+	// inserted just as a real boot would. Idempotent, so this is cheap after
+	// the first call in a test binary.
+	if err := seed.Apply(context.Background(), st, log); err != nil {
+		t.Fatalf("seed problems: %v", err)
 	}
 	srv := server.New(st, log, server.Options{SnapshotEvery: snapshotEvery, Version: "test"})
 	ts := httptest.NewServer(srv.Handler())
@@ -72,17 +78,17 @@ func createRoom(t *testing.T, ts *httptest.Server, body string) (int, server.Roo
 func TestCreatePracticeRoom(t *testing.T) {
 	ts, _ := newTestServer(t, 200)
 
-	status, created := createRoom(t, ts, `{"mode":"practice","problemId":"duck-pond-census"}`)
+	status, created := createRoom(t, ts, `{"mode":"practice","problemId":"two-sum"}`)
 	if status != http.StatusCreated {
 		t.Fatalf("status %d", status)
 	}
 	if len(created.Room.ID) != 22 {
 		t.Fatalf("room id should be 22 url-safe chars, got %q", created.Room.ID)
 	}
-	if created.Room.Mode != store.ModePractice || created.Room.ProblemID == nil || *created.Room.ProblemID != "duck-pond-census" {
+	if created.Room.Mode != store.ModePractice || created.Room.ProblemID == nil || *created.Room.ProblemID != "two-sum" {
 		t.Fatalf("unexpected room %+v", created.Room)
 	}
-	if created.Problem == nil || created.Problem.ID != "duck-pond-census" || created.Problem.StarterCode == "" {
+	if created.Problem == nil || created.Problem.ID != "two-sum" || created.Problem.StarterCode == "" {
 		t.Fatalf("expected embedded problem, got %+v", created.Problem)
 	}
 
@@ -100,7 +106,7 @@ func TestCreatePracticeRoom(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&fetched); err != nil {
 		t.Fatal(err)
 	}
-	if fetched.Room.ID != created.Room.ID || fetched.Problem == nil || fetched.Problem.ID != "duck-pond-census" {
+	if fetched.Room.ID != created.Room.ID || fetched.Problem == nil || fetched.Problem.ID != "two-sum" {
 		t.Fatalf("fetched room mismatch: %+v", fetched)
 	}
 }
@@ -127,7 +133,7 @@ func TestCreateRoomValidation(t *testing.T) {
 	cases := map[string]string{
 		"bad mode":           `{"mode":"quiz"}`,
 		"unknown problem":    `{"mode":"practice","problemId":"nope"}`,
-		"blank with problem": `{"mode":"blank","problemId":"duck-pond-census"}`,
+		"blank with problem": `{"mode":"blank","problemId":"two-sum"}`,
 		"invalid json":       `{`,
 	}
 	for name, body := range cases {
@@ -150,24 +156,127 @@ func TestCreateRoomValidation(t *testing.T) {
 
 func TestProblemsEndpoint(t *testing.T) {
 	ts, _ := newTestServer(t, 200)
-	resp, err := http.Get(ts.URL + "/api/problems")
+	resp, err := http.Get(ts.URL + "/api/problems?official=true")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 	var out struct {
-		Problems []problems.Summary `json:"problems"`
+		Problems []struct {
+			ID         string `json:"id"`
+			Title      string `json:"title"`
+			Difficulty string `json:"difficulty"`
+			Official   bool   `json:"official"`
+			TestCount  int    `json:"testCount"`
+			Author     struct {
+				Handle string `json:"handle"`
+			} `json:"author"`
+		} `json:"problems"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Problems) != 3 {
-		t.Fatalf("expected 3 problems, got %d", len(out.Problems))
+	// Counted from the catalog rather than hard-coded, so adding a problem to
+	// the seed does not fail this test for the wrong reason.
+	if want := len(seed.Problems()); len(out.Problems) != want {
+		t.Fatalf("expected the %d seeded problems, got %d", want, len(out.Problems))
 	}
-	for _, p := range problems.All() {
-		if p.StarterCode == "" || p.Statement == "" || len(p.Examples) == 0 {
-			t.Fatalf("problem %s is incomplete", p.ID)
+	for _, p := range out.Problems {
+		if !p.Official {
+			t.Errorf("%s should be flagged official", p.ID)
 		}
+		if p.Author.Handle != seed.SystemHandle {
+			t.Errorf("%s is authored by %q, want the system account", p.ID, p.Author.Handle)
+		}
+		if p.TestCount == 0 {
+			t.Errorf("%s ships with no test cases", p.ID)
+		}
+	}
+}
+
+func TestGetProblemReturnsEverythingNeededToSolveIt(t *testing.T) {
+	ts, _ := newTestServer(t, 200)
+	resp, err := http.Get(ts.URL + "/api/problems/palindrome-number")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Problem struct {
+			ID          string `json:"id"`
+			Title       string `json:"title"`
+			Statement   string `json:"statement"`
+			StarterCode string `json:"starterCode"`
+			EntryPoint  string `json:"entryPoint"`
+			Examples    []struct {
+				Input string `json:"input"`
+			} `json:"examples"`
+			Tests []struct {
+				Name   string          `json:"name"`
+				Args   json.RawMessage `json:"args"`
+				Hidden bool            `json:"hidden"`
+			} `json:"tests"`
+		} `json:"problem"`
+		CanEdit bool `json:"canEdit"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	p := out.Problem
+	if p.ID != "palindrome-number" || p.Title == "" || p.Statement == "" || p.StarterCode == "" {
+		t.Fatalf("incomplete problem: %+v", p)
+	}
+	if p.EntryPoint != "is_palindrome" {
+		t.Errorf("entry point %q", p.EntryPoint)
+	}
+	if len(p.Examples) == 0 {
+		t.Error("no examples")
+	}
+	if len(p.Tests) < 3 {
+		t.Errorf("expected several test cases, got %d", len(p.Tests))
+	}
+	var hidden int
+	for _, test := range p.Tests {
+		if test.Hidden {
+			hidden++
+		}
+		if len(test.Args) == 0 {
+			t.Errorf("test %q has no arguments", test.Name)
+		}
+	}
+	if hidden == 0 {
+		t.Error("expected at least one hidden case")
+	}
+	if out.CanEdit {
+		t.Error("an anonymous caller must not be able to edit a seeded problem")
+	}
+}
+
+func TestRoomSnapshotsTheProblem(t *testing.T) {
+	ts, _ := newTestServer(t, 200)
+	status, created := createRoom(t, ts, `{"mode":"practice","problemId":"two-sum"}`)
+	if status != http.StatusCreated {
+		t.Fatalf("status %d", status)
+	}
+	if created.Problem == nil || created.Problem.Title != "Two Sum" {
+		t.Fatalf("room did not come back with its problem: %+v", created.Problem)
+	}
+	if created.Problem.StarterCode == "" || len(created.Problem.Tests) == 0 {
+		t.Fatal("the snapshot should carry the starter code and the tests")
+	}
+
+	// Reading the room again returns the snapshot, not a fresh lookup.
+	resp, err := http.Get(ts.URL + "/api/rooms/" + created.Room.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out server.RoomResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Problem == nil || out.Problem.ID != "two-sum" {
+		t.Fatalf("room lost its problem: %+v", out.Problem)
 	}
 }
 
@@ -337,7 +446,7 @@ func TestWebSocketRelaysAndPersistsUpdates(t *testing.T) {
 	a.expectSync(yproto.SyncUpdate, update(4))
 
 	// Awareness is broadcast to everyone, including the sender (keepalive).
-	aw := yproto.AwarenessMessage(yproto.EncodeAwarenessUpdate([]yproto.AwarenessEntry{{ClientID: 7, Clock: 1, State: `{"user":{"name":"TA"}}`}}))
+	aw := yproto.AwarenessMessage(yproto.EncodeAwarenessUpdate([]yproto.AwarenessEntry{{ClientID: 7, Clock: 1, State: `{"user":{"name":"Lin"}}`}}))
 	a.send(aw)
 	if got := a.recv(); !bytes.Equal(got, aw) {
 		t.Fatalf("A did not get own awareness echoed: %x", got)
@@ -371,7 +480,7 @@ func TestWebSocketRelaysAndPersistsUpdates(t *testing.T) {
 		}
 	}
 	// New joiner immediately learns of B's awareness state.
-	b.send(yproto.AwarenessMessage(yproto.EncodeAwarenessUpdate([]yproto.AwarenessEntry{{ClientID: 9, Clock: 1, State: `{"user":{"name":"Student"}}`}})))
+	b.send(yproto.AwarenessMessage(yproto.EncodeAwarenessUpdate([]yproto.AwarenessEntry{{ClientID: 9, Clock: 1, State: `{"user":{"name":"Ada"}}`}})))
 	_ = b.recv() // own echo
 	_ = a2.recv()
 	a3 := dial(t, ts, roomID)
@@ -384,7 +493,7 @@ func TestWebSocketRelaysAndPersistsUpdates(t *testing.T) {
 func TestDocumentSurvivesBackendRestart(t *testing.T) {
 	// First server instance: create room and write updates.
 	ts1, srv1 := newTestServer(t, 200)
-	_, created := createRoom(t, ts1, `{"mode":"practice","problemId":"commit-message-linter"}`)
+	_, created := createRoom(t, ts1, `{"mode":"practice","problemId":"reverse-integer"}`)
 	roomID := created.Room.ID
 
 	a := dial(t, ts1, roomID)

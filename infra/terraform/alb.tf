@@ -1,8 +1,8 @@
-# Application Load Balancer. Everything is served from one hostname: the
-# default action goes to the Next.js frontend, and /api/*, /ws/*, /healthz,
-# /readyz are routed to the Go backend. Serving both from the same origin means
-# the browser opens WebSockets to the page's own host (wss:// under HTTPS), so
-# no CORS configuration is needed in production.
+# Application Load Balancer. Everything is served from one hostname: the default
+# action goes to the frontend (nginx serving the built SPA) and /api/*, /ws/*,
+# /healthz, /readyz are routed to the Go backend. Serving both from the same
+# origin means the browser opens WebSockets to the page's own host (wss:// under
+# HTTPS), so no CORS configuration is needed in production.
 
 resource "aws_lb" "main" {
   name               = "${local.name}-alb"

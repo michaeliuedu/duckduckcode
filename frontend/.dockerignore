@@ -1,8 +1,12 @@
 node_modules
-.next
+dist
 .git
+.gitignore
 e2e
+playwright.config.ts
 playwright-report
 test-results
+coverage
 *.md
 .env*
+*.tsbuildinfo

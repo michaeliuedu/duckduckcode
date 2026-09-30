@@ -22,6 +22,7 @@ import (
 
 	"github.com/duckduckcode/backend/internal/config"
 	"github.com/duckduckcode/backend/internal/db"
+	"github.com/duckduckcode/backend/internal/seed"
 	"github.com/duckduckcode/backend/internal/server"
 	"github.com/duckduckcode/backend/internal/store"
 )
@@ -97,11 +98,27 @@ func run(cfg config.Config, log *slog.Logger) error {
 	defer pool.Close()
 
 	st := store.New(pool)
+
+	// The problems that ship with the app are ordinary rows owned by a system
+	// account. Inserting them here rather than in a migration keeps their text
+	// in Go, where it is already written and correctly escaped, and makes the
+	// step idempotent: an operator who edits a seeded problem keeps their edit.
+	if err := seed.Apply(ctx, st, log); err != nil {
+		return fmt.Errorf("seed problems: %w", err)
+	}
+
 	srv := server.New(st, log, server.Options{
 		AllowedOrigins: cfg.CORSAllowedOrigins,
 		SnapshotEvery:  cfg.SnapshotEvery,
+		SessionTTL:     cfg.SessionTTL,
 		Version:        version,
+
+		LoginAttemptsPerIP:    cfg.LoginAttemptsPerIP,
+		LoginAttemptsPerEmail: cfg.LoginAttemptsPerEmail,
+		SignupsPerIP:          cfg.SignupsPerIP,
 	})
+
+	go sweepExpiredSessions(ctx, st, log)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Addr,
@@ -155,4 +172,28 @@ func newLogger(cfg config.Config) *slog.Logger {
 		h = slog.NewTextHandler(os.Stdout, opts)
 	}
 	return slog.New(h)
+}
+
+// sweepExpiredSessions deletes sessions that can no longer authenticate
+// anyone. Expiry is enforced on every lookup, so this is housekeeping rather
+// than a security control: without it the table only ever grows.
+func sweepExpiredSessions(ctx context.Context, st *store.Store, log *slog.Logger) {
+	const every = time.Hour
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			deleted, err := st.DeleteExpiredSessions(ctx)
+			if err != nil {
+				log.Error("sweep expired sessions", "err", err)
+				continue
+			}
+			if deleted > 0 {
+				log.Info("expired sessions removed", "count", deleted)
+			}
+		}
+	}
 }

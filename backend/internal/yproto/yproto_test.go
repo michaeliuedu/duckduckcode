@@ -105,7 +105,7 @@ func TestSyncMessages(t *testing.T) {
 
 func TestAwarenessRoundTrip(t *testing.T) {
 	in := []AwarenessEntry{
-		{ClientID: 42, Clock: 3, State: `{"user":{"name":"TA"}}`},
+		{ClientID: 42, Clock: 3, State: `{"user":{"name":"Lin"}}`},
 		{ClientID: 99, Clock: 8, State: "null"},
 	}
 	enc := EncodeAwarenessUpdate(in)

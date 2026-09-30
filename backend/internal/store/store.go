@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -26,12 +27,21 @@ const (
 
 // Room is a persisted room record.
 type Room struct {
-	ID        string    `json:"id"`
-	Mode      Mode      `json:"mode"`
+	ID   string `json:"id"`
+	Mode Mode   `json:"mode"`
+	// ProblemID is the slug of the problem this room was started from, kept as
+	// a soft reference so "open the original" works. It may point at a problem
+	// that has since been edited or deleted.
 	ProblemID *string   `json:"problemId"`
 	Language  string    `json:"language"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+
+	// ProblemSnapshot is the problem exactly as it was when the room was
+	// created. This is what the room displays: an author editing or deleting
+	// their problem must not change what a pair is looking at mid-session.
+	// Not serialised directly — the handler unpacks it into the response.
+	ProblemSnapshot json.RawMessage `json:"-"`
 }
 
 // Update is one persisted Yjs update.
@@ -74,7 +84,7 @@ func NewRoomID() (string, error) {
 // snapshot (seq 0) so every client receives it on first sync, which avoids
 // the "two clients both insert the starter code" race that client-side
 // seeding would create.
-func (s *Store) CreateRoom(ctx context.Context, mode Mode, problemID *string, language string, seed []byte) (Room, error) {
+func (s *Store) CreateRoom(ctx context.Context, mode Mode, problemID *string, language string, seed, snapshot []byte) (Room, error) {
 	id, err := NewRoomID()
 	if err != nil {
 		return Room{}, err
@@ -87,11 +97,11 @@ func (s *Store) CreateRoom(ctx context.Context, mode Mode, problemID *string, la
 
 	var r Room
 	err = tx.QueryRow(ctx, `
-		INSERT INTO rooms (id, mode, problem_id, language)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, mode, problem_id, language, created_at, updated_at`,
-		id, string(mode), problemID, language,
-	).Scan(&r.ID, &r.Mode, &r.ProblemID, &r.Language, &r.CreatedAt, &r.UpdatedAt)
+		INSERT INTO rooms (id, mode, problem_id, language, problem_snapshot)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, mode, problem_id, language, created_at, updated_at, problem_snapshot`,
+		id, string(mode), problemID, language, nullableBytes(snapshot),
+	).Scan(&r.ID, &r.Mode, &r.ProblemID, &r.Language, &r.CreatedAt, &r.UpdatedAt, &r.ProblemSnapshot)
 	if err != nil {
 		return Room{}, fmt.Errorf("insert room: %w", err)
 	}
@@ -107,13 +117,21 @@ func (s *Store) CreateRoom(ctx context.Context, mode Mode, problemID *string, la
 	return r, nil
 }
 
+// nullableBytes stores NULL rather than an empty JSON value for a blank room.
+func nullableBytes(raw []byte) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	return raw
+}
+
 // GetRoom loads a room by id.
 func (s *Store) GetRoom(ctx context.Context, id string) (Room, error) {
 	var r Room
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, mode, problem_id, language, created_at, updated_at
+		SELECT id, mode, problem_id, language, created_at, updated_at, problem_snapshot
 		FROM rooms WHERE id = $1`, id,
-	).Scan(&r.ID, &r.Mode, &r.ProblemID, &r.Language, &r.CreatedAt, &r.UpdatedAt)
+	).Scan(&r.ID, &r.Mode, &r.ProblemID, &r.Language, &r.CreatedAt, &r.UpdatedAt, &r.ProblemSnapshot)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Room{}, ErrNotFound
 	}

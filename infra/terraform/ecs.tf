@@ -146,10 +146,11 @@ resource "aws_ecs_task_definition" "frontend" {
       protocol      = "tcp"
     }]
     environment = [
+      # The port nginx listens on inside the container.
       { name = "PORT", value = "3000" },
-      { name = "HOSTNAME", value = "0.0.0.0" },
-      # Empty = the browser talks to the backend on the page's own origin; the
-      # ALB routes /api and /ws to the backend target group.
+      # Written into /runtime-config.js when the container starts, so the same
+      # image serves every environment. Empty = the browser talks to the backend
+      # on the page's own origin, and the ALB routes /api and /ws to it.
       { name = "BACKEND_PUBLIC_URL", value = "" },
     ]
     logConfiguration = {

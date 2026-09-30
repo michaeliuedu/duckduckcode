@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/duckduckcode/backend/internal/hub"
-	"github.com/duckduckcode/backend/internal/problems"
+	"github.com/duckduckcode/backend/internal/seed"
 	"github.com/duckduckcode/backend/internal/store"
 	"github.com/duckduckcode/backend/internal/yproto"
 )
@@ -26,6 +26,23 @@ type Options struct {
 	AllowedOrigins []string
 	SnapshotEvery  int
 	Version        string
+	// SessionTTL is how long a login lasts without use. Zero means
+	// auth.DefaultSessionTTL.
+	SessionTTL time.Duration
+	// Rate limits; zero means the default. LoginAttemptsPerIP and SignupsPerIP
+	// are per quarter hour and per hour respectively, and exist to blunt floods
+	// rather than to stop a targeted attack — many legitimate people can share
+	// one address. LoginAttemptsPerEmail is the one that matters for guessing.
+	LoginAttemptsPerIP    int
+	LoginAttemptsPerEmail int
+	SignupsPerIP          int
+}
+
+func orDefault(value, fallback int) int {
+	if value > 0 {
+		return value
+	}
+	return fallback
 }
 
 // Server is the HTTP handler set.
@@ -36,6 +53,14 @@ type Server struct {
 	opts    Options
 	handler http.Handler
 	started time.Time
+
+	// Guard rails on the two endpoints worth attacking. Per-IP limits are
+	// generous because a lecture hall behind one campus NAT is a single address
+	// as far as we can tell; the tight limit is per email, which is what
+	// actually stops someone grinding a password.
+	loginIPLimit    *limiter
+	loginEmailLimit *limiter
+	signupIPLimit   *limiter
 }
 
 // New builds the server and its routes.
@@ -47,23 +72,61 @@ func New(st *store.Store, log *slog.Logger, opts Options) *Server {
 		}
 	}
 	s := &Server{
-		store:   st,
-		log:     log,
-		opts:    opts,
-		started: time.Now(),
+		store:       st,
+		log:         log,
+		opts:        opts,
+		started:     time.Now(),
+		loginIPLimit:    newLimiter(orDefault(opts.LoginAttemptsPerIP, 30), 15*time.Minute),
+		loginEmailLimit: newLimiter(orDefault(opts.LoginAttemptsPerEmail, 5), 15*time.Minute),
+		signupIPLimit:   newLimiter(orDefault(opts.SignupsPerIP, 30), time.Hour),
 	}
 	s.hub = hub.New(st, log, hub.Options{SnapshotEvery: opts.SnapshotEvery, OriginPatterns: originPatterns})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
+
+	// Accounts. Rooms deliberately need none of this: a link is still enough
+	// to join and edit, which is the whole point of sharing one.
+	mux.HandleFunc("POST /api/auth/signup", s.handleSignup)
+	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
+	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
+	mux.HandleFunc("GET /api/auth/me", s.handleMe)
+	mux.HandleFunc("PATCH /api/auth/profile", s.requireUser(s.handleUpdateProfile))
+	mux.HandleFunc("POST /api/auth/password", s.requireUser(s.handleChangePassword))
+	// Problems. Browsing is open to everyone; writing needs an account, and
+	// every write re-checks ownership in the handler.
+	mux.HandleFunc("GET /api/home", s.handleHomeFeed)
 	mux.HandleFunc("GET /api/problems", s.handleListProblems)
-	mux.HandleFunc("GET /api/problems/{id}", s.handleGetProblem)
+	mux.HandleFunc("GET /api/problems/{slug}", s.handleGetProblem)
+	mux.HandleFunc("POST /api/problems", s.requireUser(s.handleCreateProblem))
+	mux.HandleFunc("PATCH /api/problems/{slug}", s.requireUser(s.handleUpdateProblem))
+	mux.HandleFunc("PUT /api/problems/{slug}/visibility", s.requireUser(s.handleSetProblemVisibility))
+	mux.HandleFunc("DELETE /api/problems/{slug}", s.requireUser(s.handleDeleteProblem))
+
+	// Lists.
+	mux.HandleFunc("GET /api/lists", s.requireUser(s.handleMyLists))
+	mux.HandleFunc("POST /api/lists", s.requireUser(s.handleCreateList))
+	mux.HandleFunc("GET /api/lists/{id}", s.handleGetList)
+	mux.HandleFunc("PATCH /api/lists/{id}", s.requireUser(s.handleUpdateList))
+	mux.HandleFunc("DELETE /api/lists/{id}", s.requireUser(s.handleDeleteList))
+	mux.HandleFunc("POST /api/lists/{id}/items", s.requireUser(s.handleAddListItem))
+	mux.HandleFunc("DELETE /api/lists/{id}/items/{problemId}", s.requireUser(s.handleRemoveListItem))
+
+	mux.HandleFunc("GET /api/users/{handle}", s.handleGetProfile)
+
+	// Progress. Self-reported, because the tests run in the browser.
+	mux.HandleFunc("POST /api/progress", s.requireUser(s.handleRecordAttempt))
+	mux.HandleFunc("GET /api/progress", s.requireUser(s.handleMyProgress))
+
 	mux.HandleFunc("POST /api/rooms", s.handleCreateRoom)
 	mux.HandleFunc("GET /api/rooms/{id}", s.handleGetRoom)
 	mux.HandleFunc("GET /ws/rooms/{id}", s.handleRoomSocket)
 
-	s.handler = s.logging(s.cors(mux))
+	// Outermost first: log everything, answer CORS preflights before anything
+	// else looks at the request, refuse cross-origin writes, then resolve the
+	// session so handlers can read it.
+	s.handler = s.logging(s.cors(s.requireSameOrigin(s.withUser(mux))))
 	return s
 }
 
@@ -97,78 +160,94 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
-// Problems
-// ---------------------------------------------------------------------------
-
-func (s *Server) handleListProblems(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"problems": problems.Summaries()})
-}
-
-func (s *Server) handleGetProblem(w http.ResponseWriter, r *http.Request) {
-	p, ok := problems.Get(r.PathValue("id"))
-	if !ok {
-		writeError(w, http.StatusNotFound, "problem not found")
-		return
-	}
-	writeJSON(w, http.StatusOK, p)
-}
-
-// ---------------------------------------------------------------------------
 // Rooms
 // ---------------------------------------------------------------------------
 
 type createRoomRequest struct {
-	Mode      string `json:"mode"`
+	Mode string `json:"mode"`
+	// ProblemID is a problem slug.
 	ProblemID string `json:"problemId"`
 }
 
 // RoomResponse is the payload returned for room creation and lookup.
+//
+// Problem is the copy stored with the room, not a live read: an author editing
+// their problem must not change what a pair is already looking at.
 type RoomResponse struct {
-	Room    store.Room        `json:"room"`
-	Problem *problems.Problem `json:"problem,omitempty"`
+	Room    store.Room     `json:"room"`
+	Problem *store.Problem `json:"problem,omitempty"`
 }
 
 func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 	var req createRoomRequest
-	r.Body = http.MaxBytesReader(w, r.Body, 4096)
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
 	var (
 		mode      store.Mode
 		problemID *string
-		problem   *problems.Problem
-		seed      []byte
+		problem   *store.Problem
+		seedBytes []byte
+		snapshot  []byte
+		language  = seed.Language
 	)
+
 	switch store.Mode(req.Mode) {
 	case store.ModePractice:
-		p, ok := problems.Get(req.ProblemID)
-		if !ok {
+		found, err := s.store.ProblemBySlug(r.Context(), req.ProblemID)
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusBadRequest, "unknown problemId")
 			return
 		}
+		if err != nil {
+			s.log.Error("load problem", "err", err)
+			writeError(w, http.StatusInternalServerError, "could not create room")
+			return
+		}
+		// A draft is not something to start a room from unless it is yours.
+		if found.Visibility == store.VisibilityDraft && !s.isAuthor(r, found) {
+			writeError(w, http.StatusBadRequest, "unknown problemId")
+			return
+		}
+
+		encoded, err := json.Marshal(found)
+		if err != nil {
+			s.log.Error("encode problem snapshot", "err", err)
+			writeError(w, http.StatusInternalServerError, "could not create room")
+			return
+		}
 		mode = store.ModePractice
-		problem = &p
-		problemID = &p.ID
-		seed = yproto.SeedTextUpdate(SeedClientID, "content", p.StarterCode)
+		problem = &found
+		problemID = &found.ID
+		snapshot = encoded
+		language = found.Language
+		seedBytes = yproto.SeedTextUpdate(SeedClientID, "content", found.StarterCode)
+
 	case store.ModeBlank:
 		if req.ProblemID != "" {
 			writeError(w, http.StatusBadRequest, "problemId is only valid for practice mode")
 			return
 		}
 		mode = store.ModeBlank
+
 	default:
 		writeError(w, http.StatusBadRequest, `mode must be "practice" or "blank"`)
 		return
 	}
 
-	room, err := s.store.CreateRoom(r.Context(), mode, problemID, problems.Language, seed)
+	room, err := s.store.CreateRoom(r.Context(), mode, problemID, language, seedBytes, snapshot)
 	if err != nil {
 		s.log.Error("create room", "err", err)
 		writeError(w, http.StatusInternalServerError, "could not create room")
 		return
+	}
+	if problem != nil {
+		// Popularity is "how many rooms were started from this", counted here.
+		// Failing to count is not a reason to fail the room.
+		if err := s.store.NoteProblemUsed(r.Context(), problem.ID); err != nil {
+			s.log.Error("count problem use", "err", err, "slug", problem.ID)
+		}
 	}
 	s.log.Info("room created", "room", room.ID, "mode", room.Mode, "problem", req.ProblemID)
 	writeJSON(w, http.StatusCreated, RoomResponse{Room: room, Problem: problem})
@@ -185,13 +264,29 @@ func (s *Server) handleGetRoom(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not load room")
 		return
 	}
-	resp := RoomResponse{Room: room}
-	if room.ProblemID != nil {
-		if p, ok := problems.Get(*room.ProblemID); ok {
-			resp.Problem = &p
+	writeJSON(w, http.StatusOK, RoomResponse{Room: room, Problem: s.roomProblem(r, room)})
+}
+
+// roomProblem returns the problem a room displays: its own snapshot, or — for
+// rooms created before snapshots existed — a live lookup by slug.
+func (s *Server) roomProblem(r *http.Request, room store.Room) *store.Problem {
+	if len(room.ProblemSnapshot) > 0 {
+		var problem store.Problem
+		if err := json.Unmarshal(room.ProblemSnapshot, &problem); err == nil {
+			return &problem
 		}
+		s.log.Error("decode room problem snapshot", "room", room.ID)
 	}
-	writeJSON(w, http.StatusOK, resp)
+	if room.ProblemID == nil {
+		return nil
+	}
+	problem, err := s.store.ProblemBySlug(r.Context(), *room.ProblemID)
+	if err != nil {
+		// The problem was deleted or renamed. The room still works; it just
+		// has no statement to show.
+		return nil
+	}
+	return &problem
 }
 
 func (s *Server) handleRoomSocket(w http.ResponseWriter, r *http.Request) {
@@ -207,6 +302,9 @@ const SeedClientID uint32 = 0xD0C5EED
 // Middleware & helpers
 // ---------------------------------------------------------------------------
 
+// allowedMethods is advertised in the CORS preflight response.
+const allowedMethods = "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS"
+
 func (s *Server) cors(next http.Handler) http.Handler {
 	allowed := map[string]bool{}
 	for _, o := range s.opts.AllowedOrigins {
@@ -218,8 +316,16 @@ func (s *Server) cors(next http.Handler) http.Handler {
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origin)
 			h.Set("Vary", "Origin")
-			h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			// Every method the routes actually use. Missing one here fails only
+			// cross-origin — which in practice means local development and the
+			// e2e suite, never production, where everything is same-origin.
+			// TestCORSAllowsEveryMethodTheRoutesUse guards against drift.
+			h.Set("Access-Control-Allow-Methods", allowedMethods)
 			h.Set("Access-Control-Allow-Headers", "Content-Type")
+			// The session lives in a cookie, so a cross-origin frontend (local
+			// development against a remote backend) has to be allowed to send
+			// it. Safe only because the allow-list is explicit: it is never "*".
+			h.Set("Access-Control-Allow-Credentials", "true")
 			h.Set("Access-Control-Max-Age", "600")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <!-- SVG first for anything modern; the .ico stays for browsers that ignore it. -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <title>duckduckcode</title>
+    <meta
+      name="description"
+      content="Community-written practice problems you can work through with someone else: one shared file, live cursors, run and test it in the browser."
+    />
+
+    <!--
+      Resolve the theme before first paint so there is no flash of the wrong
+      colours. Keep in sync with src/lib/theme.ts (same storage key and the
+      same light/dark class contract).
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("duckduckcode.theme");
+          var pref = stored === "light" || stored === "dark" ? stored : "system";
+          var dark =
+            pref === "dark" ||
+            (pref === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.add(dark ? "dark" : "light");
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (e) {
+          document.documentElement.classList.add("light");
+        }
+      })();
+    </script>
+
+    <!--
+      Runtime configuration. Shipped with empty defaults and rewritten by the
+      container entrypoint from environment variables, so one built image serves
+      every environment. Must load before the app bundle.
+    -->
+    <script src="/runtime-config.js"></script>
+  </head>
+  <body class="h-full">
+    <div id="root" class="h-full"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

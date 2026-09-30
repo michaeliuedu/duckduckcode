@@ -23,6 +23,12 @@ type Config struct {
 	// SnapshotEvery is the number of persisted updates after which the server
 	// asks a client for a compacted snapshot.
 	SnapshotEvery int
+	// SessionTTL is how long a login lasts without being used.
+	SessionTTL time.Duration
+	// Rate limits on the account endpoints. See server.Options.
+	LoginAttemptsPerIP    int
+	LoginAttemptsPerEmail int
+	SignupsPerIP          int
 	// ShutdownTimeout bounds graceful shutdown.
 	ShutdownTimeout time.Duration
 	// LogFormat is "json" or "text".
@@ -38,6 +44,11 @@ func FromEnv() (Config, error) {
 		DatabaseURL:     os.Getenv("DATABASE_URL"),
 		MigrateOnStart:  getenvBool("MIGRATE_ON_START", true),
 		SnapshotEvery:   getenvInt("SNAPSHOT_EVERY", 200),
+		SessionTTL:      getenvDuration("SESSION_TTL", 30*24*time.Hour),
+
+		LoginAttemptsPerIP:    getenvInt("LOGIN_ATTEMPTS_PER_IP", 30),
+		LoginAttemptsPerEmail: getenvInt("LOGIN_ATTEMPTS_PER_EMAIL", 5),
+		SignupsPerIP:          getenvInt("SIGNUPS_PER_IP", 30),
 		ShutdownTimeout: 15 * time.Second,
 		LogFormat:       getenv("LOG_FORMAT", "text"),
 		LogLevel:        getenv("LOG_LEVEL", "info"),
@@ -75,6 +86,18 @@ func getenvBool(key string, def bool) bool {
 		return def
 	}
 	return b
+}
+
+func getenvDuration(key string, def time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		return def
+	}
+	return d
 }
 
 func getenvInt(key string, def int) int {
