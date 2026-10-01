@@ -6,7 +6,7 @@ import { ProblemRow } from "@/features/problems/ProblemRow";
 import { pluralizeCount } from "@/lib/format";
 import { AppHeader } from "@/ui/AppHeader";
 import { ArrowLeftIcon, PlusIcon } from "@/ui/Icons";
-import { SearchBar } from "./HomePage";
+import { SearchBar } from "@/features/problems/SearchBar";
 import type { ProblemsLoaderData } from "./loaders";
 
 const SORTS = [

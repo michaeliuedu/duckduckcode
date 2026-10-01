@@ -10,10 +10,11 @@
 import { Form, Link, useLoaderData, useNavigation } from "react-router";
 import { useCurrentUser } from "@/auth/session";
 import { ProblemList } from "@/features/problems/ProblemRow";
+import { SearchBar } from "@/features/problems/SearchBar";
 import { ProgressGrid, ProgressStats } from "@/features/progress/ProgressGrid";
 import { AppHeader } from "@/ui/AppHeader";
 import { Button } from "@/ui/Button";
-import { PlusIcon, SearchIcon } from "@/ui/Icons";
+import { PlusIcon } from "@/ui/Icons";
 import { Spinner } from "@/ui/Spinner";
 import type { HomeLoaderData } from "./loaders";
 
@@ -144,34 +145,6 @@ export function HomePage() {
         )}
       </main>
     </div>
-  );
-}
-
-/** Submits to /problems as a GET, so a search is a shareable URL. */
-export function SearchBar({ defaultValue = "", className = "" }: { defaultValue?: string; className?: string }) {
-  const navigation = useNavigation();
-  const searching = navigation.state === "loading" && navigation.location?.pathname === "/problems";
-
-  return (
-    <Form method="get" action="/problems" className={`flex min-w-[240px] gap-2 ${className}`.trim()} data-testid="search-form">
-      <div className="relative flex-1">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]">
-          <SearchIcon size={15} />
-        </span>
-        <input
-          type="search"
-          name="q"
-          defaultValue={defaultValue}
-          placeholder="Search problems — graphs, strings, recursion…"
-          aria-label="Search problems"
-          data-testid="search-input"
-          className="field h-10 w-full pl-9 text-[14px]"
-        />
-      </div>
-      <Button type="submit" variant="ghost" busy={searching}>
-        Search
-      </Button>
-    </Form>
   );
 }
 
