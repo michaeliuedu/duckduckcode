@@ -108,10 +108,11 @@ func run(cfg config.Config, log *slog.Logger) error {
 	}
 
 	srv := server.New(st, log, server.Options{
-		AllowedOrigins: cfg.CORSAllowedOrigins,
-		SnapshotEvery:  cfg.SnapshotEvery,
-		SessionTTL:     cfg.SessionTTL,
-		Version:        version,
+		AllowedOrigins:  cfg.CORSAllowedOrigins,
+		SnapshotEvery:   cfg.SnapshotEvery,
+		SessionTTL:      cfg.SessionTTL,
+		CrossSiteCookie: cfg.CrossSiteCookie,
+		Version:         version,
 
 		LoginAttemptsPerIP:    cfg.LoginAttemptsPerIP,
 		LoginAttemptsPerEmail: cfg.LoginAttemptsPerEmail,

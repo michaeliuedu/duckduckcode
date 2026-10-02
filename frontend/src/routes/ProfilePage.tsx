@@ -83,7 +83,7 @@ export function ProfilePage() {
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="section-heading">Lists</h2>
               {isMe && (
-                <Link to="/lists" className="text-[13px] font-medium text-[var(--brand)]">
+                <Link to="/lists" className="link text-[13px]">
                   Manage
                 </Link>
               )}

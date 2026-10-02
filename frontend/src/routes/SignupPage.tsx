@@ -20,7 +20,7 @@ export function SignupPage() {
       footer={
         <>
           Already have one?{" "}
-          <Link to={{ pathname: "/login", search: params.toString() }} className="font-medium text-[var(--brand)]">
+          <Link to={{ pathname: "/login", search: params.toString() }} className="link">
             Sign in
           </Link>
           .

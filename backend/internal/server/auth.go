@@ -42,7 +42,21 @@ func secureRequest(r *http.Request) bool {
 	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
+// sameSite is Lax unless the deployment puts the frontend on another site.
+//
+// Lax still sends the cookie on top-level navigation, so following a room link
+// keeps you signed in, while blocking it on cross-site POSTs. None is needed
+// when the frontend is hosted separately — a cross-site fetch drops a Lax
+// cookie entirely — and browsers only accept None together with Secure.
+func (s *Server) sameSite() (http.SameSite, bool) {
+	if s.opts.CrossSiteCookie {
+		return http.SameSiteNoneMode, true
+	}
+	return http.SameSiteLaxMode, false
+}
+
 func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time) {
+	sameSite, forceSecure := s.sameSite()
 	http.SetCookie(w, &http.Cookie{
 		Name:  SessionCookieName,
 		Value: token,
@@ -50,23 +64,24 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, token 
 		// HttpOnly: script must not be able to read the session, so an XSS bug
 		// in a problem statement cannot become account takeover.
 		HttpOnly: true,
-		Secure:   secureRequest(r),
-		// Lax still sends the cookie on top-level navigation, so following a
-		// room link keeps you signed in, while blocking it on cross-site POSTs.
-		SameSite: http.SameSiteLaxMode,
+		Secure:   forceSecure || secureRequest(r),
+		SameSite: sameSite,
 		Expires:  expires,
 		MaxAge:   int(time.Until(expires).Seconds()),
 	})
 }
 
 func (s *Server) clearSessionCookie(w http.ResponseWriter, r *http.Request) {
+	// The attributes must match the ones it was set with, or the browser keeps
+	// the original cookie alongside the expired one.
+	sameSite, forceSecure := s.sameSite()
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   secureRequest(r),
-		SameSite: http.SameSiteLaxMode,
+		Secure:   forceSecure || secureRequest(r),
+		SameSite: sameSite,
 		MaxAge:   -1,
 	})
 }

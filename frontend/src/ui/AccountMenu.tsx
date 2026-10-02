@@ -67,7 +67,7 @@ export function AccountMenu() {
         aria-label={`Account menu for ${user.displayName}`}
         data-testid="account-button"
         onClick={() => setOpen(!open)}
-        className="flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-semibold text-white"
+        className="account-avatar flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-semibold text-white"
         style={{ backgroundColor: participant.color }}
       >
         <span aria-hidden>{initials(user.displayName)}</span>

@@ -170,7 +170,7 @@ function GridView({ value, changed }: { value: TraceValue & { t: "grid" }; chang
         <button
           type="button"
           onClick={() => setAsGraph(!asGraph)}
-          className="mt-1 text-[11px] font-medium text-[var(--brand)]"
+          className="link mt-1 text-[11px]"
           data-testid="grid-as-graph"
         >
           {asGraph ? "Show as grid" : "Read as a graph"}

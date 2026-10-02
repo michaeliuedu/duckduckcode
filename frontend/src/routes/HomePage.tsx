@@ -113,7 +113,7 @@ export function HomePage() {
               impliedOfficial
               testId="section-official"
               action={
-                <Link to="/problems?official=true" className="text-[13px] font-medium text-[var(--brand)]">
+                <Link to="/problems?official=true" className="link text-[13px]">
                   See all
                 </Link>
               }
@@ -125,7 +125,7 @@ export function HomePage() {
               solved={solved}
               testId="section-popular"
               action={
-                <Link to="/problems?sort=popular" className="text-[13px] font-medium text-[var(--brand)]">
+                <Link to="/problems?sort=popular" className="link text-[13px]">
                   Browse all
                 </Link>
               }
@@ -136,7 +136,7 @@ export function HomePage() {
               solved={solved}
               testId="section-recent"
               action={
-                <Link to="/problems?sort=recent" className="text-[13px] font-medium text-[var(--brand)]">
+                <Link to="/problems?sort=recent" className="link text-[13px]">
                   Browse all
                 </Link>
               }

@@ -20,7 +20,7 @@ export function LoginPage() {
       footer={
         <>
           No account yet?{" "}
-          <Link to={{ pathname: "/signup", search: params.toString() }} className="font-medium text-[var(--brand)]">
+          <Link to={{ pathname: "/signup", search: params.toString() }} className="link">
             Create one
           </Link>
           .

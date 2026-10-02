@@ -38,6 +38,14 @@ html.light {
   --medium: #b57300;
   --hard: #d92b47;
   --trace-line: rgba(255, 184, 0, 0.22);
+
+  /* Corner radii. One scale instead of eight scattered values, and tighter
+     than before: the softer corners read as friendly, the tighter ones read
+     as a tool. */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
 }
 
 html.dark {
@@ -86,8 +94,8 @@ html.dark {
 }
 
 :root {
-  --font-ui: "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-code: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-ui: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-code: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* CodeMirror reads these directly. */
   --font-sans: var(--font-ui);
   --font-mono: var(--font-code);
@@ -176,7 +184,7 @@ body {
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--ink);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 /* The duck is its own shape, so it gets no tile behind it — just enough of a
    shadow to keep it from dissolving into a pale header. */
@@ -188,6 +196,30 @@ body {
 .brand-word {
   white-space: nowrap;
 }
+.brand {
+  transition: opacity 120ms ease;
+}
+.brand:hover {
+  opacity: 0.75;
+}
+
+/* --- Links ----------------------------------------------------------------
+   The "See all" / "Manage" / "Create one" links. They were brand-coloured text
+   with no hover at all, which on a pointer device reads as decoration rather
+   than something you can click.
+   ------------------------------------------------------------------------- */
+
+.link {
+  font-weight: 500;
+  color: var(--brand);
+  border-radius: var(--radius-xs);
+  transition: color 120ms ease;
+}
+.link:hover {
+  color: var(--brand-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 
 /* --- Buttons ------------------------------------------------------------- */
 
@@ -196,7 +228,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   font-weight: 500;
   white-space: nowrap;
@@ -273,7 +305,7 @@ body {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--ink-soft);
@@ -298,7 +330,7 @@ body {
 
 .field {
   height: 32px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: var(--panel);
   padding: 0 8px;
@@ -319,7 +351,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   padding: 1px 8px;
   font-size: 11px;
   font-weight: 600;
@@ -384,7 +416,7 @@ body {
   border: 1px solid var(--line);
   /* Matches the problem list and the cards elsewhere; the room panes were the
      only surface in the app with a tighter corner. */
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--panel);
   box-shadow: var(--shadow);
 }
@@ -408,7 +440,7 @@ body {
   height: 26px;
   align-items: center;
   gap: 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   padding: 0 10px;
   font-size: 13px;
@@ -489,7 +521,7 @@ body {
 .split-divider-y:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: -2px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 /* While a divider is held, nothing else on the page should select or blink. */
@@ -530,7 +562,7 @@ body.is-resizing-y * {
   max-width: 100%;
   align-items: center;
   overflow: hidden;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   border: 1px solid var(--line);
   background: var(--chip);
   padding: 2px 7px;
@@ -542,7 +574,7 @@ body.is-resizing-y * {
 }
 
 .var-changed {
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   outline: 1px solid color-mix(in srgb, var(--ok) 55%, transparent);
   outline-offset: 2px;
 }
@@ -573,7 +605,7 @@ body.is-resizing-y * {
 
 /* The caret under a cell, naming the variable that indexes it. */
 .cell-pointer {
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--brand);
   padding: 0 3px;
   font-family: var(--font-code);
@@ -709,6 +741,14 @@ body.is-resizing-y * {
   padding: 0 12px;
 }
 
+.account-avatar {
+  transition: box-shadow 120ms ease;
+}
+.account-avatar:hover,
+.account-avatar[aria-expanded="true"] {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--line-strong);
+}
+
 .account-menu-item {
   display: block;
   padding: 7px 12px;
@@ -751,7 +791,7 @@ body.is-resizing-y * {
 .prose-statement strong { color: var(--ink); font-weight: 600; }
 .prose-statement a { color: var(--brand); text-decoration: underline; }
 .prose-statement code {
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--chip);
   padding: 1px 5px;
   font-family: var(--font-code);
@@ -759,7 +799,7 @@ body.is-resizing-y * {
 }
 .prose-statement pre {
   overflow-x: auto;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--line);
   background: var(--panel-2);
   padding: 10px 12px;
@@ -794,7 +834,7 @@ body.is-resizing-y * {
   text-align: left;
 }
 .prose-statement th { background: var(--panel-2); font-weight: 600; }
-.prose-statement img { max-width: 100%; border-radius: 6px; }
+.prose-statement img { max-width: 100%; border-radius: var(--radius-sm); }
 .prose-statement hr { border: none; border-top: 1px solid var(--line); }
 
 /* --- Problem rows ---------------------------------------------------------
@@ -806,7 +846,7 @@ body.is-resizing-y * {
 .problem-list {
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--panel);
 }
 
@@ -818,8 +858,11 @@ body.is-resizing-y * {
 .problem-row-wrap:last-child {
   border-bottom: none;
 }
+.problem-row-wrap {
+  transition: background-color 120ms ease;
+}
 .problem-row-wrap:hover {
-  background: var(--panel-2);
+  background: var(--chip);
 }
 
 .problem-row-link {
@@ -941,8 +984,16 @@ body.is-resizing-y * {
   display: block;
   height: 11px;
   width: 11px;
-  border-radius: 2.5px;
+  border-radius: 2px;
   background: var(--chip);
+  transition: outline-color 100ms ease;
+  outline: 1px solid transparent;
+  outline-offset: 1px;
+}
+/* Only the squares in the grid, which carry a title worth reading. The five in
+   the legend are decoration and must not look hoverable. */
+.progress-square[title]:hover {
+  outline-color: var(--line-strong);
 }
 .progress-square[data-level="1"] {
   background: color-mix(in srgb, var(--brand) 28%, var(--chip));
@@ -963,9 +1014,12 @@ body.is-resizing-y * {
 
 .surface {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--panel);
   box-shadow: var(--shadow);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 /* The banner at the top of the home page.
@@ -977,7 +1031,7 @@ body.is-resizing-y * {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: var(--panel);
   box-shadow: var(--shadow);
   padding: 28px;
@@ -988,7 +1042,7 @@ body.is-resizing-y * {
    eye to stop. */
 .auth-card {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: var(--panel);
   box-shadow: var(--shadow);
   padding: 24px;
@@ -1040,7 +1094,7 @@ h3 {
   display: inline-block;
   height: 14px;
   width: 3px;
-  border-radius: 999px;
+  border-radius: 1px;
   background: var(--brand);
 }
 

@@ -29,6 +29,9 @@ type Options struct {
 	// SessionTTL is how long a login lasts without use. Zero means
 	// auth.DefaultSessionTTL.
 	SessionTTL time.Duration
+	// CrossSiteCookie sends the session cookie as SameSite=None; Secure, for a
+	// frontend hosted on a different site from this API. See config.Config.
+	CrossSiteCookie bool
 	// Rate limits; zero means the default. LoginAttemptsPerIP and SignupsPerIP
 	// are per quarter hour and per hour respectively, and exist to blunt floods
 	// rather than to stop a targeted attack — many legitimate people can share

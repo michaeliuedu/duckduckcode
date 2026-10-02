@@ -25,6 +25,16 @@ type Config struct {
 	SnapshotEvery int
 	// SessionTTL is how long a login lasts without being used.
 	SessionTTL time.Duration
+	// CrossSiteCookie relaxes the session cookie to SameSite=None so it
+	// survives a deployment where the frontend and the API are on different
+	// sites (a Vercel frontend calling an API elsewhere, say). It forces the
+	// Secure attribute with it, because browsers reject SameSite=None without
+	// it, so this only works over HTTPS.
+	//
+	// Off by default: the same-origin deployment keeps SameSite=Lax, which is
+	// the stronger setting. With it on, CSRF protection rests entirely on the
+	// Origin check in requireSameOrigin.
+	CrossSiteCookie bool
 	// Rate limits on the account endpoints. See server.Options.
 	LoginAttemptsPerIP    int
 	LoginAttemptsPerEmail int
@@ -45,6 +55,7 @@ func FromEnv() (Config, error) {
 		MigrateOnStart:  getenvBool("MIGRATE_ON_START", true),
 		SnapshotEvery:   getenvInt("SNAPSHOT_EVERY", 200),
 		SessionTTL:      getenvDuration("SESSION_TTL", 30*24*time.Hour),
+		CrossSiteCookie: getenvBool("SESSION_COOKIE_CROSS_SITE", false),
 
 		LoginAttemptsPerIP:    getenvInt("LOGIN_ATTEMPTS_PER_IP", 30),
 		LoginAttemptsPerEmail: getenvInt("LOGIN_ATTEMPTS_PER_EMAIL", 5),

@@ -84,7 +84,7 @@ export function ProblemForm({ initial, fields, error, submitLabel, hidden = {} }
           </label>
           <button
             type="button"
-            className="text-[12px] font-medium text-[var(--brand)]"
+            className="link text-[12px]"
             onClick={() => setPreview((on) => !on)}
             data-testid="toggle-preview"
           >
