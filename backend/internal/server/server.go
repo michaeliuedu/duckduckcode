@@ -75,10 +75,10 @@ func New(st *store.Store, log *slog.Logger, opts Options) *Server {
 		}
 	}
 	s := &Server{
-		store:       st,
-		log:         log,
-		opts:        opts,
-		started:     time.Now(),
+		store:           st,
+		log:             log,
+		opts:            opts,
+		started:         time.Now(),
 		loginIPLimit:    newLimiter(orDefault(opts.LoginAttemptsPerIP, 30), 15*time.Minute),
 		loginEmailLimit: newLimiter(orDefault(opts.LoginAttemptsPerEmail, 5), 15*time.Minute),
 		signupIPLimit:   newLimiter(orDefault(opts.SignupsPerIP, 30), time.Hour),

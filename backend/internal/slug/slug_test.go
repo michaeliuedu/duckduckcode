@@ -9,14 +9,14 @@ import (
 
 func TestMake(t *testing.T) {
 	cases := map[string]string{
-		"Longest Palindromic Substring": "longest-palindromic-substring",
+		"Longest Palindromic Substring":      "longest-palindromic-substring",
 		"  Median  of Two   Sorted Arrays  ": "median-of-two-sorted-arrays",
-		"Two-Sum":                 "two-sum",
-		"snake_case_title":        "snake-case-title",
-		"C++ pointers?!":          "c-pointers",
-		"100 Doors":               "100-doors",
-		"a/b testing":             "a-b-testing",
-		"--leading and trailing--": "leading-and-trailing",
+		"Two-Sum":                            "two-sum",
+		"snake_case_title":                   "snake-case-title",
+		"C++ pointers?!":                     "c-pointers",
+		"100 Doors":                          "100-doors",
+		"a/b testing":                        "a-b-testing",
+		"--leading and trailing--":           "leading-and-trailing",
 	}
 	for title, want := range cases {
 		if got := slug.Make(title); got != want {

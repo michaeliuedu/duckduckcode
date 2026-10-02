@@ -60,9 +60,9 @@ func FromEnv() (Config, error) {
 		LoginAttemptsPerIP:    getenvInt("LOGIN_ATTEMPTS_PER_IP", 30),
 		LoginAttemptsPerEmail: getenvInt("LOGIN_ATTEMPTS_PER_EMAIL", 5),
 		SignupsPerIP:          getenvInt("SIGNUPS_PER_IP", 30),
-		ShutdownTimeout: 15 * time.Second,
-		LogFormat:       getenv("LOG_FORMAT", "text"),
-		LogLevel:        getenv("LOG_LEVEL", "info"),
+		ShutdownTimeout:       15 * time.Second,
+		LogFormat:             getenv("LOG_FORMAT", "text"),
+		LogLevel:              getenv("LOG_LEVEL", "info"),
 	}
 	if c.DatabaseURL == "" {
 		return c, fmt.Errorf("DATABASE_URL is required")
